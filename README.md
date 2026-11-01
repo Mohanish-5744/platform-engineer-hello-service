@@ -8,7 +8,7 @@ instance with no SSH, and GitHub Actions to validate all of it.
 | Endpoint | Response |
 |---|---|
 | `GET /` | `Hello from hello-service!` |
-| `GET /health` | `{"status": "ok", "service": "hello-service", "version": "1.0.0", "uptime_seconds": 42}` |
+| `GET /health` | `{"status": "ok! Service is alive and responding.", "service": "hello-service", "version": "1.0.0", "uptime_seconds": 42}` |
 | `GET /metrics` | Prometheus text format: request counts by path and status, uptime |
 
 > **Deployment status:** _fill in: "Deployed to AWS ap-south-1 on <date> and destroyed after testing" or "Not deployed; the hiring team confirmed code review is sufficient. Validated in CI."_
