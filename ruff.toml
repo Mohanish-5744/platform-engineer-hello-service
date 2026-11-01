@@ -1,0 +1,6 @@
+# Lint config used by CI (`ruff check .`).
+line-length = 100
+target-version = "py39"   # Amazon Linux 2023 system python
+
+[lint]
+select = ["E", "F", "W", "B", "UP"]

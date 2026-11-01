@@ -1,0 +1,19 @@
+# Terraform: provider binaries, state (contains resource details), plans, local vars
+terraform/.terraform/
+*.tfstate
+*.tfstate.*
+*.tfplan
+tfplan
+terraform/terraform.tfvars
+
+
+# Python
+__pycache__/
+*.pyc
+
+# Never commit credentials
+.env
+*.pem
+
+# CI / local run logs
+*.log

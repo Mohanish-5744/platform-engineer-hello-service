@@ -1,0 +1,46 @@
+#cloud-config
+# First-boot bootstrap for the EC2 instance (rendered by templatefile() in main.tf).
+# Installs the same files as scripts/install.sh; nothing is downloaded.
+# Log: /var/log/cloud-init-output.log
+
+write_files:
+  - path: /opt/hello-service/app.py
+    encoding: gz+b64
+    content: ${app_py}
+    owner: root:root
+    permissions: "0644"
+
+  - path: /etc/hello-service/env
+    content: |
+      APP_VERSION=${app_version}
+    owner: root:root
+    permissions: "0644"
+
+  - path: /etc/systemd/system/hello.service
+    encoding: gz+b64
+    content: ${service_unit}
+    owner: root:root
+    permissions: "0644"
+
+  - path: /usr/local/bin/hello-healthcheck.sh
+    encoding: gz+b64
+    content: ${healthcheck_sh}
+    owner: root:root
+    permissions: "0755"
+
+  - path: /etc/systemd/system/hello-healthcheck.service
+    encoding: gz+b64
+    content: ${healthcheck_service}
+    owner: root:root
+    permissions: "0644"
+
+  - path: /etc/systemd/system/hello-healthcheck.timer
+    encoding: gz+b64
+    content: ${healthcheck_timer}
+    owner: root:root
+    permissions: "0644"
+
+runcmd:
+  - [systemctl, daemon-reload]
+  - [systemctl, enable, --now, hello.service]
+  - [systemctl, enable, --now, hello-healthcheck.timer]

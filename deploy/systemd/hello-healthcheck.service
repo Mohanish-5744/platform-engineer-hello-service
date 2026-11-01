@@ -1,0 +1,9 @@
+# Installed to /etc/systemd/system/hello-healthcheck.service
+# Started by hello-healthcheck.timer. Runs as root so it can restart hello.service.
+[Unit]
+Description=Health check for hello.service
+After=hello.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/hello-healthcheck.sh

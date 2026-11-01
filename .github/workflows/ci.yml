@@ -1,0 +1,143 @@
+name: CI
+
+# push / PR:   lint, unit tests, secret scan, real systemd install on the runner
+#              (incl. crash and hang recovery), Terraform validate.
+# manual run:  optionally smoke-test a live deployment by URL.
+# No cloud credentials are used anywhere in this workflow.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      target_url:
+        description: "Deployed URL to smoke test, e.g. http://13.234.10.20 (optional)"
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - name: ruff (Python)
+        run: pip install ruff==0.16.9 && ruff check .
+      - name: shellcheck (Bash)
+        run: shellcheck scripts/*.sh deploy/healthcheck.sh
+
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - name: Unit tests
+        run: python -m unittest discover -s tests -v
+      - name: Run the app and smoke test it
+        run: |
+          PORT=8080 python app/app.py > app.log 2>&1 &
+          CHECK_SSH_CLOSED=false RETRIES=10 DELAY=1 ./scripts/smoke-test.sh http://127.0.0.1:8080
+      - name: App log
+        if: always()
+        run: cat app.log
+
+  secret-scan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: read
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0 # scan full history, not just the last commit
+      - uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  systemd-install:
+    # The GitHub runner is an Ubuntu VM with systemd, so the real install
+    # and the real recovery behaviour can be tested here.
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Install the service
+        run: sudo ./scripts/install.sh
+
+      - name: Install again (re-run must be safe)
+        run: sudo ./scripts/install.sh
+
+      - name: Verify installed units
+        run: |
+          systemd-analyze verify /etc/systemd/system/hello.service \
+            /etc/systemd/system/hello-healthcheck.service /etc/systemd/system/hello-healthcheck.timer
+          systemctl is-enabled hello.service hello-healthcheck.timer
+          systemctl is-active hello.service hello-healthcheck.timer
+
+      - name: Smoke test
+        run: CHECK_SSH_CLOSED=false RETRIES=10 DELAY=2 ./scripts/smoke-test.sh http://127.0.0.1
+
+      - name: Crash test (systemd Restart=always)
+        run: |
+          sudo systemctl kill --signal=SIGKILL hello.service
+          for _ in $(seq 1 15); do
+            curl -fsS --max-time 2 http://127.0.0.1/health && break
+            sleep 1
+          done
+          curl -fsS --max-time 2 http://127.0.0.1/health
+          echo "restarts so far: $(systemctl show hello.service -p NRestarts --value)"
+
+      - name: Hang test (health check detects and restarts)
+        run: |
+          # SIGSTOP freezes the process: still "running" to systemd, but serves nothing.
+          sudo systemctl kill --signal=SIGSTOP hello.service
+          if sudo /usr/local/bin/hello-healthcheck.sh; then
+            echo "health check did not notice the hung service"; exit 1
+          fi
+          sleep 5
+          curl -fsS --max-time 2 http://127.0.0.1/health
+          journalctl -t hello-healthcheck --no-pager
+
+      - name: Service logs
+        if: always()
+        run: sudo journalctl -u hello -u hello-healthcheck --no-pager -n 100
+
+  terraform:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: terraform
+    steps:
+      - uses: actions/checkout@v6
+      - uses: hashicorp/setup-terraform@v3
+      - run: terraform fmt -check -recursive -diff
+      - run: terraform init -backend=false -input=false
+      - run: terraform validate
+
+  smoke-deployed:
+    if: github.event_name == 'workflow_dispatch' && inputs.target_url != ''
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v6
+      - name: Smoke test the live deployment
+        env:
+          TARGET_URL: ${{ inputs.target_url }} # via env, not inline, to avoid shell injection
+        run: RETRIES=3 DELAY=5 ./scripts/smoke-test.sh "$TARGET_URL"

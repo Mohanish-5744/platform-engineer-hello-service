@@ -1,0 +1,12 @@
+# Installed to /etc/systemd/system/hello-healthcheck.timer
+# systemd timer rather than cron: runs show up in journald and `systemctl list-timers`.
+[Unit]
+Description=Run the hello-service health check every minute
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=1min
+AccuracySec=5s
+
+[Install]
+WantedBy=timers.target
