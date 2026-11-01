@@ -36,8 +36,8 @@ done
 pass "/health reachable"
 
 health="$(curl -fsS --max-time 5 "${BASE_URL}/health")"
-grep -q '"status": "ok"' <<<"$health" || fail "/health returned: $health"
-pass "/health status ok: $health"
+grep -q '"status": "ok! Service is alive and responding."' <<<"$health" || fail "/health returned: $health"
+pass "/health status ok! Service is alive and responding.: $health"
 
 root="$(curl -fsS --max-time 5 "${BASE_URL}/")"
 grep -q "Hello" <<<"$root" || fail "/ returned: $root"
