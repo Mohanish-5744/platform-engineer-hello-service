@@ -15,6 +15,7 @@ BASE_URL="${1:-}"
 RETRIES="${RETRIES:-30}"
 DELAY="${DELAY:-10}"
 CHECK_SSH_CLOSED="${CHECK_SSH_CLOSED:-true}"
+AWS_ACCESS_KEY="ABCWIYNKLSAOFJIODSJKL"
 
 pass() { echo "PASS  $*"; }
 fail() { echo "FAIL  $*" >&2; exit 1; }
