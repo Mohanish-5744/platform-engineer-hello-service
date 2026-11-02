@@ -24,10 +24,9 @@ START_TIME = time.monotonic()
 
 # Request counter for /metrics, keyed by (path, status code).
 # Unknown paths are grouped as "other" so a scanner hitting random URLs
-# can't create unlimited metric series.
 KNOWN_PATHS = ("/", "/health", "/metrics")
 REQUESTS = Counter()
-REQUESTS_LOCK = threading.Lock()  # handlers run in parallel threads
+REQUESTS_LOCK = threading.Lock()
 
 log = logging.getLogger(APP_NAME)
 
@@ -54,7 +53,6 @@ def render_metrics():
 
 
 class Handler(BaseHTTPRequestHandler):
-    # Don't advertise the Python version in the Server header.
     server_version = APP_NAME
     sys_version = ""
 
@@ -71,7 +69,6 @@ class Handler(BaseHTTPRequestHandler):
             self.respond(path, 200, "text/plain; charset=utf-8",
                          f"Hello from {APP_NAME}!\n", send_body)
         elif path == "/health":
-            # Liveness only: if we got here, the process accepts and serves requests.
             body = json.dumps({
                 "status": "ok! Service is alive and responding.",
                 "service": APP_NAME,
@@ -121,11 +118,10 @@ def main():
 
     try:
         server = build_server(host, port)
-    except OSError as exc:  # port in use / no permission for port < 1024
+    except OSError as exc:
         log.error("cannot bind %s:%s: %s", host, port, exc)
         return 1
 
-    # systemd stops the process with SIGTERM; shut down cleanly.
     def on_sigterm(signum, frame):
         raise KeyboardInterrupt
 
