@@ -11,8 +11,6 @@ instance with no SSH, and GitHub Actions to validate all of it.
 | `GET /health` | `{"status": "ok! Service is alive and responding.", "service": "hello-service", "version": "1.0.0", "uptime_seconds": 42}` |
 | `GET /metrics` | Prometheus text format: request counts by path and status, uptime |
 
-> **Deployment status:** deployed to AWS ap-south-1 (t3.micro, Amazon Linux 2023) on 2 Nov 2026, validated end to end (endpoints, security group, crash and hang recovery), then destroyed. Issues hit during the build are in [TROUBLESHOOTING.md](TROUBLESHOOTING.md).
-
 ## Requirements → implementation
 
 | Requirement | How |
