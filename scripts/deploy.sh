@@ -4,9 +4,6 @@
 #   scripts/deploy.sh               plan, ask, apply, test
 #   scripts/deploy.sh --plan-only   dry run: show the plan, change nothing
 #   AUTO_APPROVE=true scripts/deploy.sh
-#
-# Uses your local AWS CLI credentials (aws configure / AWS_PROFILE / SSO).
-# Nothing credential-related lives in the repo.
 
 set -euo pipefail
 

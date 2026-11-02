@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Installed to /usr/local/bin/hello-healthcheck.sh, run every minute by the timer.
-#
+
 # Restart=always only helps when the process exits. If the app hangs, the
 # process is still "running" but serves nothing, so check the real endpoint.
 # 3 failed attempts -> log to journald, restart the service, exit 1.

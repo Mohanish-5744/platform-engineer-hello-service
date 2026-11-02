@@ -11,7 +11,6 @@ data "aws_ami" "al2023" {
   }
 }
 
-# Default VPC already has public subnets and an internet gateway.
 data "aws_vpc" "default" {
   default = true
 }
@@ -33,8 +32,6 @@ locals {
 }
 
 # --- Security group ---------------------------------------------------------
-# Terraform removes AWS's default allow-all egress rule, so only the rules
-# below exist.
 
 resource "aws_security_group" "web" {
   name_prefix = "${var.project_name}-web-"
@@ -118,8 +115,7 @@ resource "aws_instance" "web" {
     app_version         = var.app_version
   })
 
-  # Any change to the app or config builds a new instance instead of
-  # patching the old one.
+
   user_data_replace_on_change = true
 
   # IMDSv2 only; hop limit 1 keeps containers on the host away from it.

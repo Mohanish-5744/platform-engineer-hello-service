@@ -1,10 +1,6 @@
-name: CI
+name: CI Pipeline
 
-# push / PR:   lint, unit tests, secret scan, real systemd install on the runner
-#              (incl. crash and hang recovery), Terraform validate.
-# manual run:  optionally smoke-test a live deployment by URL.
-# No cloud credentials are used anywhere in this workflow.
-
+# This workflow runs on every push to the main branch, every pull request, and can be manually triggered.
 on:
   push:
     branches: [main]
