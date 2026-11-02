@@ -11,7 +11,7 @@ instance with no SSH, and GitHub Actions to validate all of it.
 | `GET /health` | `{"status": "ok! Service is alive and responding.", "service": "hello-service", "version": "1.0.0", "uptime_seconds": 42}` |
 | `GET /metrics` | Prometheus text format: request counts by path and status, uptime |
 
-> **Deployment status:** _fill in: "Deployed to AWS ap-south-1 on <date> and destroyed after testing" or "Not deployed; the hiring team confirmed code review is sufficient. Validated in CI."_
+> **Deployment status:** deployed to AWS ap-south-1 (t3.micro, Amazon Linux 2023) on 2 Nov 2026, validated end to end (endpoints, security group, crash and hang recovery), then destroyed. Issues hit during the build are in [TROUBLESHOOTING.md](TROUBLESHOOTING.md).
 
 ## Requirements → implementation
 
@@ -73,6 +73,7 @@ scripts/deploy.sh           Terraform wrapper: preflight, plan, confirm, apply, 
 scripts/smoke-test.sh       External black-box test
 .github/workflows/ci.yml    CI pipeline
 operations-note.md          Outage runbook
+TROUBLESHOOTING.md          Issues hit during build/deploy, root causes and fixes
 docs/                       Diagrams and PROJECT_FLOW.md walkthrough
 ```
 
@@ -81,6 +82,14 @@ docs/                       Diagrams and PROJECT_FLOW.md walkthrough
 - Python 3.9+, `bash`, `curl` (Linux, macOS or WSL/Git Bash on Windows)
 - For `install.sh`: a systemd Linux host (Ubuntu, Amazon Linux, a VM or WSL with systemd) and sudo
 - For AWS: Terraform 1.6+, AWS CLI v2 with working credentials, the [Session Manager plugin](https://docs.aws.amazon.com/systems-manager/latest/userguide/session-manager-working-with-install-plugin.html), and an account on the Free Tier
+
+### Windows notes
+
+Tested on Windows 11 with Git Bash. Three things to get right first (details in [TROUBLESHOOTING.md](TROUBLESHOOTING.md)):
+
+- Install **AWS CLI v2** from the [MSI](https://awscli.amazonaws.com/AWSCLIV2.msi). Don't use the pip `awscli` (v1) package, and don't alias `aws` to `aws.cmd`: scripts ignore aliases. Check with `type aws` and `which -a aws`; both should point to `/c/Program Files/Amazon/AWSCLIV2/aws`.
+- Windows drops the executable bit on commit. Before the first push run `git update-index --chmod=+x scripts/*.sh deploy/healthcheck.sh` and confirm with `git ls-files -s scripts deploy/healthcheck.sh` (expect `100755`).
+- If the app fails locally with `WinError 10013`, Windows is blocking that port. Use another one, e.g. `PORT=9090`.
 
 ## Setup
 
@@ -92,6 +101,8 @@ PORT=8080 python3 app/app.py
 # second terminal
 CHECK_SSH_CLOSED=false ./scripts/smoke-test.sh http://127.0.0.1:8080
 ```
+
+On Windows use `python` instead of `python3`. If 8080 gives `WinError 10013`, use `PORT=9090` and test `http://127.0.0.1:9090`.
 
 ### 2. Install on a Linux host
 
@@ -120,6 +131,14 @@ The instance configures itself on first boot (cloud-init), so nothing connects t
 ```bash
 URL=$(terraform -chdir=terraform output -raw service_url)
 ./scripts/smoke-test.sh "$URL"     # health, root, 404, metrics, port 22 closed
+```
+
+In a browser use `http://<public-ip>/` – plain HTTP on port 80. There is no HTTPS and no `:8080` on EC2 (8080 is the local default only).
+
+If it times out from your laptop, test from a second network to split "my network" from "AWS side". AWS CloudShell works well for this:
+
+```bash
+curl -v --max-time 5 http://<public-ip>/health    # run in CloudShell
 ```
 
 Security group has exactly one inbound rule:
@@ -158,7 +177,9 @@ CI runs the same crash and hang tests on every push (`systemd-install` job).
 | `terraform` | `fmt`, `init -backend=false`, `validate` (no AWS access needed) |
 | `smoke-deployed` | Manual: **Actions → CI → Run workflow**, paste a URL to test a live deployment |
 
-**Example run:** _add link / screenshot: `![CI run](docs/ci-run.png)`_
+**Example run:** [run #15 – all jobs green](https://github.com/Mohanish-5744/platform-engineer-hello-service/actions/runs/41389024127)
+
+The gates were also checked with a negative test: a commit with an unused, hard-coded AWS key variable on a separate PR was failed by both `lint` (shellcheck SC2034) and `secret-scan` (gitleaks).
 
 ## Cleanup
 
@@ -179,6 +200,21 @@ sudo systemctl daemon-reload
 ```
 
 ## Troubleshooting
+
+Full write-up of the issues hit during this build, with diagnosis steps: [TROUBLESHOOTING.md](TROUBLESHOOTING.md).
+
+**Seen during this build**
+
+| Symptom | Cause | Fix |
+|---|---|---|
+| `deploy.sh`: "AWS credentials not working", but `aws sts get-caller-identity` works in the shell | Shell alias `aws` → `aws.cmd`; scripts ignore aliases and ran a broken pip AWS CLI v1 | `pip uninstall awscli`, install AWS CLI v2 (MSI), remove the alias, new shell. Debug with `type aws`, `which -a aws`, `bash -x ./scripts/deploy.sh --plan-only` |
+| `aws.cmd: command not found` after the fix | Alias still loaded in the open shell | `unalias aws` or open a new Git Bash window |
+| CI: `Permission denied` (exit 126) in `test` / `systemd-install` | Scripts committed from Windows as `100644` | `git update-index --chmod=+x scripts/*.sh deploy/healthcheck.sh`, commit, push |
+| Local: `WinError 10013` binding 8080 | Windows blocking the port | Use another port: `PORT=9090` |
+| Browser → EC2: `ERR_TIMED_OUT` | Packets dropped before the app: stale `allowed_http_cidrs`, still booting, browser forcing HTTPS, or local network blocking 80 | `curl` from CloudShell; check SG source CIDR; in SSM `curl localhost/health` |
+| `http://<ip>:8080` never loads | App listens on 80 on EC2, SG allows only 80 | Use `http://<ip>` |
+
+**Other common cases**
 
 | Symptom | Likely cause | Check |
 |---|---|---|
@@ -215,7 +251,4 @@ sudo systemctl daemon-reload
 - **Egress 443 to anywhere.** Needed for SSM over the internet gateway. VPC endpoints in a private subnet would remove that.
 - **Liveness only.** `/health` proves the process serves HTTP; a service with dependencies would add a readiness check.
 - **Free Tier depends on the account.** Public IPv4 addresses are billed outside free allowances; destroy when done.
-
-## How this was built
-
-_Edit in your own words. Suggested: "I used an AI assistant (Claude) to help draft and review parts of the code and documentation. I chose the approach, ran and tested everything locally and in CI, and can explain each part."_
+- **Tested from Windows + Git Bash.** Local quirks (CLI install, exec bit, blocked ports) are covered above; CI and EC2 run Linux and aren't affected.
